@@ -1,6 +1,7 @@
 # waifu2x ncnn Vulkan
 
 ![CI](https://github.com/nihui/waifu2x-ncnn-vulkan/workflows/CI/badge.svg)
+![download](https://img.shields.io/github/downloads/nihui/waifu2x-ncnn-vulkan/total.svg)
 
 ncnn implementation of waifu2x converter. Runs fast on Intel / AMD / Nvidia with Vulkan API.
 
@@ -32,10 +33,10 @@ Usage: waifu2x-ncnn-vulkan -i infile -o outfile [options]...
   -i input-path        input image path (jpg/png/webp) or directory
   -o output-path       output image path (jpg/png/webp) or directory
   -n noise-level       denoise level (-1/0/1/2/3, default=0)
-  -s scale             upscale ratio (1/2, default=2)
+  -s scale             upscale ratio (1/2/4/8/16/32, default=2)
   -t tile-size         tile size (>=32/0=auto, default=0) can be 0,0,0 for multi-gpu
   -m model-path        waifu2x model path (default=models-cunet)
-  -g gpu-id            gpu device to use (default=0) can be 0,1,2 for multi-gpu
+  -g gpu-id            gpu device to use (-1=cpu, default=auto) can be 0,1,2 for multi-gpu
   -j load:proc:save    thread count for load/proc/save (default=1:2:2) can be 1:2,2,2:2 for multi-gpu
   -x                   enable tta mode
   -f format            output image format (jpg/png/webp, default=ext/png)

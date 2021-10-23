@@ -106,7 +106,7 @@ static void print_usage()
     fprintf(stdout, "  -i input-path        input image path (jpg/png/webp) or directory\n");
     fprintf(stdout, "  -o output-path       output image path (jpg/png/webp) or directory\n");
     fprintf(stdout, "  -n noise-level       denoise level (-1/0/1/2/3, default=0)\n");
-    fprintf(stdout, "  -s scale             upscale ratio (1/2, default=2)\n");
+    fprintf(stdout, "  -s scale             upscale ratio (1/2/4/8/16/32, default=2)\n");
     fprintf(stdout, "  -t tile-size         tile size (>=32/0=auto, default=0) can be 0,0,0 for multi-gpu\n");
     fprintf(stdout, "  -m model-path        waifu2x model path (default=models-cunet)\n");
     fprintf(stdout, "  -g gpu-id            gpu device to use (-1=cpu, default=auto) can be 0,1,2 for multi-gpu\n");
@@ -120,6 +120,7 @@ class Task
 public:
     int id;
     int webp;
+    int scale;
 
     path_t inpath;
     path_t outpath;
@@ -271,11 +272,11 @@ void* load(void* args)
             Task v;
             v.id = i;
             v.webp = webp;
+            v.scale = scale;
             v.inpath = imagepath;
             v.outpath = ltp->output_files[i];
 
             v.inimage = ncnn::Mat(w, h, (void*)pixeldata, (size_t)c, c);
-            v.outimage = ncnn::Mat(w * scale, h * scale, (size_t)c, c);
 
             path_t ext = get_file_extension(v.outpath);
             if (c == 4 && (ext == PATHSTR("jpg") || ext == PATHSTR("JPG") || ext == PATHSTR("jpeg") || ext == PATHSTR("JPEG")))
@@ -324,7 +325,47 @@ void* proc(void* args)
         if (v.id == -233)
             break;
 
+        const int scale = v.scale;
+        if (scale == 1)
+        {
+            v.outimage = ncnn::Mat(v.inimage.w, v.inimage.h, (size_t)v.inimage.elemsize, (int)v.inimage.elemsize);
+            waifu2x->process(v.inimage, v.outimage);
+
+            tosave.put(v);
+            continue;
+        }
+
+        int scale_run_count = 0;
+        if (scale == 2)
+        {
+            scale_run_count = 1;
+        }
+        if (scale == 4)
+        {
+            scale_run_count = 2;
+        }
+        if (scale == 8)
+        {
+            scale_run_count = 3;
+        }
+        if (scale == 16)
+        {
+            scale_run_count = 4;
+        }
+        if (scale == 32)
+        {
+            scale_run_count = 5;
+        }
+
+        v.outimage = ncnn::Mat(v.inimage.w * 2, v.inimage.h * 2, (size_t)v.inimage.elemsize, (int)v.inimage.elemsize);
         waifu2x->process(v.inimage, v.outimage);
+
+        for (int i = 1; i < scale_run_count; i++)
+        {
+            ncnn::Mat tmp = v.outimage;
+            v.outimage = ncnn::Mat(tmp.w * 2, tmp.h * 2, (size_t)v.inimage.elemsize, (int)v.inimage.elemsize);
+            waifu2x->process(tmp, v.outimage);
+        }
 
         tosave.put(v);
     }
@@ -545,7 +586,7 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    if (scale < 1 || scale > 2)
+    if (!(scale == 1 || scale == 2 || scale == 4 || scale == 8 || scale == 16 || scale == 32))
     {
         fprintf(stderr, "invalid scale argument\n");
         return -1;
@@ -685,7 +726,7 @@ int main(int argc, char** argv)
         {
             prepadding = 28;
         }
-        else if (scale == 2)
+        else if (scale == 2 || scale == 4 || scale == 8 || scale == 16 || scale == 32)
         {
             prepadding = 18;
         }
@@ -717,7 +758,7 @@ int main(int argc, char** argv)
         swprintf(parampath, 256, L"%s/noise%d_model.param", model.c_str(), noise);
         swprintf(modelpath, 256, L"%s/noise%d_model.bin", model.c_str(), noise);
     }
-    else if (scale == 2)
+    else if (scale == 2 || scale == 4 || scale == 8 || scale == 16 || scale == 32)
     {
         swprintf(parampath, 256, L"%s/noise%d_scale2.0x_model.param", model.c_str(), noise);
         swprintf(modelpath, 256, L"%s/noise%d_scale2.0x_model.bin", model.c_str(), noise);
@@ -735,7 +776,7 @@ int main(int argc, char** argv)
         sprintf(parampath, "%s/noise%d_model.param", model.c_str(), noise);
         sprintf(modelpath, "%s/noise%d_model.bin", model.c_str(), noise);
     }
-    else if (scale == 2)
+    else if (scale == 2 || scale == 4 || scale == 8 || scale == 16 || scale == 32)
     {
         sprintf(parampath, "%s/noise%d_scale2.0x_model.param", model.c_str(), noise);
         sprintf(modelpath, "%s/noise%d_scale2.0x_model.bin", model.c_str(), noise);
@@ -794,8 +835,6 @@ int main(int argc, char** argv)
         }
         else
         {
-            int gpu_queue_count = ncnn::get_gpu_info(gpuid[i]).compute_queue_count();
-            jobs_proc[i] = std::min(jobs_proc[i], gpu_queue_count);
             total_jobs_proc += jobs_proc[i];
         }
     }
@@ -852,7 +891,7 @@ int main(int argc, char** argv)
             waifu2x[i]->load(paramfullpath, modelfullpath);
 
             waifu2x[i]->noise = noise;
-            waifu2x[i]->scale = scale;
+            waifu2x[i]->scale = (scale >= 2) ? 2 : scale;
             waifu2x[i]->tilesize = tilesize[i];
             waifu2x[i]->prepadding = prepadding;
         }
